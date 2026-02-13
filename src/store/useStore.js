@@ -109,6 +109,13 @@ const useStore = create((set) => ({
         { role: 'user', text: text?.trim() || '' },
       ],
     })),
+  addAssistantMessage: (text) =>
+    set((state) => ({
+      conversationHistory: [
+        ...state.conversationHistory,
+        { role: 'assistant', text: text?.trim() || '' },
+      ],
+    })),
   setConversationHistory: (history) =>
     set({ conversationHistory: Array.isArray(history) ? history : [] }),
   clearConversationHistory: () => set({ conversationHistory: [] }),

@@ -1,28 +1,95 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import useStore from '../store/useStore';
-import { getScenario } from '../data/scenarios';
+import { getScenario, getGoals } from '../data/scenarios';
 import AICharacter from './AICharacter';
 import FeedbackPanel from './FeedbackPanel';
 import ProgressBar from './ProgressBar';
 import VoiceInput from './VoiceInput';
+import { getAIResponse } from '../services/aiService';
+import { speak as speakTTS } from '../services/speechService';
 
 /**
- * Main 2D conversation interface: character + background, feedback panel, progress, controls.
- * Duolingo-meets-Zoom style; placeholder behavior until real AI integration.
+ * Main 2D conversation interface: voice → OpenAI → TTS → character animation + feedback.
  */
 export default function ConversationView() {
   const currentScene = useStore((s) => s.currentScene);
+  const conversationHistory = useStore((s) => s.conversationHistory);
+  const currentGoalIndex = useStore((s) => s.currentGoalIndex);
+  const playbackSpeed = useStore((s) => s.playbackSpeed);
   const exitToResults = useStore((s) => s.exitToResults);
   const goHome = useStore((s) => s.goHome);
   const addFeedback = useStore((s) => s.addFeedback);
+  const addAssistantMessage = useStore((s) => s.addAssistantMessage);
+  const setMicStatus = useStore((s) => s.setMicStatus);
+  const setIsAISpeaking = useStore((s) => s.setIsAISpeaking);
   const hintsOn = useStore((s) => s.hintsOn);
   const setHintsOn = useStore((s) => s.setHintsOn);
-  const playbackSpeed = useStore((s) => s.playbackSpeed);
   const setPlaybackSpeed = useStore((s) => s.setPlaybackSpeed);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const lastProcessedRef = useRef(0);
+  const isProcessingRef = useRef(false);
 
   const scenario = getScenario(currentScene);
+  const goals = getGoals(currentScene);
+  const currentGoal = goals[currentGoalIndex] ?? null;
+
+  // When user sends a message → call OpenAI → add reply + feedback → TTS (character animates)
+  useEffect(() => {
+    const history = conversationHistory;
+    if (!history.length || isProcessingRef.current) return;
+    const last = history[history.length - 1];
+    if (last?.role !== 'user' || history.length <= lastProcessedRef.current) return;
+
+    const userText = last.text?.trim();
+    if (!userText) return;
+
+    lastProcessedRef.current = history.length;
+    isProcessingRef.current = true;
+    setAiError(null);
+    setMicStatus('processing');
+
+    getAIResponse({
+      userMessage: userText,
+      conversationHistory: history.slice(0, -1),
+      scenarioTitle: scenario?.title ?? currentScene,
+      characterRole: scenario?.characterRole ?? 'Assistant',
+      currentGoal,
+      goals,
+      goalIndex: currentGoalIndex,
+    })
+      .then(({ reply, feedback }) => {
+        addAssistantMessage(reply);
+        feedback.forEach((item) => addFeedback(item));
+        if (reply?.trim()) {
+          speakTTS(reply.trim(), {
+            rate: playbackSpeed,
+            onStart: () => setIsAISpeaking(true),
+            onEnd: () => {
+              setIsAISpeaking(false);
+              setMicStatus('listening');
+              isProcessingRef.current = false;
+            },
+            onError: () => {
+              setIsAISpeaking(false);
+              setMicStatus('listening');
+              isProcessingRef.current = false;
+            },
+          });
+        } else {
+          setMicStatus('listening');
+          isProcessingRef.current = false;
+        }
+      })
+      .catch((err) => {
+        setAiError(err?.message ?? 'AI error');
+        addFeedback({ type: 'tip', text: 'Could not get a response. Try again.' });
+        setMicStatus('listening');
+        setIsAISpeaking(false);
+        isProcessingRef.current = false;
+      });
+  }, [conversationHistory, currentScene, scenario, currentGoal, goals, currentGoalIndex, playbackSpeed, addAssistantMessage, addFeedback, setMicStatus, setIsAISpeaking]);
 
   const handleEndConversation = () => {
     exitToResults({
@@ -70,6 +137,20 @@ export default function ConversationView() {
       <section className="flex-1 min-h-0 px-3 md:px-4 pb-2">
         <AICharacter scenarioId={currentScene} />
       </section>
+
+      {/* AI error banner */}
+      {aiError && (
+        <div className="shrink-0 px-3 md:px-4 py-2 bg-red-900/50 border-b border-red-700/50 flex items-center justify-between gap-2">
+          <span className="text-red-200 text-sm">{aiError}</span>
+          <button
+            type="button"
+            onClick={() => setAiError(null)}
+            className="text-red-300 hover:text-white text-sm font-medium"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Bottom third: feedback panel */}
       <section className="shrink-0 px-3 md:px-4 pb-3 md:pb-4">
