@@ -4,6 +4,7 @@ import { getScenario } from '../data/scenarios';
 import AICharacter from './AICharacter';
 import FeedbackPanel from './FeedbackPanel';
 import ProgressBar from './ProgressBar';
+import VoiceInput from './VoiceInput';
 
 /**
  * Main 2D conversation interface: character + background, feedback panel, progress, controls.
@@ -13,23 +14,15 @@ export default function ConversationView() {
   const currentScene = useStore((s) => s.currentScene);
   const exitToResults = useStore((s) => s.exitToResults);
   const goHome = useStore((s) => s.goHome);
-  const setMicStatus = useStore((s) => s.setMicStatus);
-  const setLiveTranscript = useStore((s) => s.setLiveTranscript);
   const addFeedback = useStore((s) => s.addFeedback);
-  const advanceGoal = useStore((s) => s.advanceGoal);
-  const currentGoalIndex = useStore((s) => s.currentGoalIndex);
   const hintsOn = useStore((s) => s.hintsOn);
   const setHintsOn = useStore((s) => s.setHintsOn);
   const playbackSpeed = useStore((s) => s.playbackSpeed);
   const setPlaybackSpeed = useStore((s) => s.setPlaybackSpeed);
 
-  const [muted, setMuted] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   const scenario = getScenario(currentScene);
-  const goals = scenario?.goals ?? [];
-  const totalGoals = goals.length;
-  const allGoalsDone = totalGoals > 0 && currentGoalIndex >= totalGoals;
 
   const handleEndConversation = () => {
     exitToResults({
@@ -38,21 +31,6 @@ export default function ConversationView() {
       pronunciationGrade: 'B+',
       fluencyFeedback: 'Great job!',
     });
-  };
-
-  /* Placeholder: simulate listening → transcript → feedback (for demo) */
-  const handleDemoSpeak = () => {
-    setMicStatus('listening');
-    setLiveTranscript('');
-    setTimeout(() => {
-      setLiveTranscript("I'd like a coffee, please.");
-      setMicStatus('processing');
-    }, 800);
-    setTimeout(() => {
-      setMicStatus('idle');
-      addFeedback({ type: 'success', text: 'Great pronunciation!' });
-      if (currentGoalIndex < totalGoals) advanceGoal();
-    }, 1600);
   };
 
   const handleDemoHint = () => {
@@ -100,17 +78,11 @@ export default function ConversationView() {
         </div>
       </section>
 
-      {/* Controls: mute, end, settings */}
-      <div className="shrink-0 flex items-center justify-end gap-2 px-3 md:px-4 pb-4">
-        {/* Placeholder demo buttons – remove when real mic/AI is wired */}
-        <div className="flex gap-2 mr-auto">
-          <button
-            type="button"
-            onClick={handleDemoSpeak}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white"
-          >
-            Demo: Speak
-          </button>
+      {/* Controls: voice input, demo hints, settings, end */}
+      <div className="shrink-0 flex items-center justify-end gap-3 px-3 md:px-4 pb-4 flex-wrap">
+        <VoiceInput />
+
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={handleDemoHint}
@@ -126,34 +98,6 @@ export default function ConversationView() {
             Demo: Goal
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setMuted((m) => !m)}
-          className={`p-2.5 rounded-full transition-colors ${
-            muted ? 'bg-red-600/80 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'
-          }`}
-          title={muted ? 'Unmute' : 'Mute'}
-          aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}
-        >
-          {muted ? (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.776L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.797-3.797a1 1 0 011.414 0zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.113-.878-4.027-2.293-5.414a1 1 0 010-1.414z"
-                clipRule="evenodd"
-              />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17h6a1 1 0 110 2h-6a1 1 0 01-1-1v-2.07z"
-                clipRule="evenodd"
-              />
-            </svg>
-          )}
-        </button>
 
         <div className="relative">
           <button

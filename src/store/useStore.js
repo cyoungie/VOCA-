@@ -25,7 +25,10 @@ const useStore = create((set) => ({
   // Conversation UI state
   currentFeedback: [], // { type: 'success'|'tip'|'goal', text: string }[]
   micStatus: 'idle', // 'idle' | 'listening' | 'processing'
-  liveTranscript: '',
+  liveTranscript: '', // what user is saying now (interim) or last final
+  currentTranscript: '', // interim only; liveTranscript shows in UI
+  isListening: false,
+  isAISpeaking: false, // true when TTS is playing (for lip-sync / talking state)
   currentGoalIndex: 0,
   hintsOn: true,
   playbackSpeed: 1,
@@ -51,6 +54,8 @@ const useStore = create((set) => ({
         currentFeedback: [],
         micStatus: 'idle',
         liveTranscript: '',
+        currentTranscript: '',
+        isListening: false,
         currentGoalIndex: 0,
       };
     }),
@@ -68,6 +73,8 @@ const useStore = create((set) => ({
       currentFeedback: [],
       micStatus: 'idle',
       liveTranscript: '',
+      currentTranscript: '',
+      isListening: false,
       currentGoalIndex: 0,
     })),
 
@@ -95,9 +102,18 @@ const useStore = create((set) => ({
     set((state) => ({
       conversationHistory: [...state.conversationHistory, entry],
     })),
+  addUserMessage: (text) =>
+    set((state) => ({
+      conversationHistory: [
+        ...state.conversationHistory,
+        { role: 'user', text: text?.trim() || '' },
+      ],
+    })),
   setConversationHistory: (history) =>
     set({ conversationHistory: Array.isArray(history) ? history : [] }),
   clearConversationHistory: () => set({ conversationHistory: [] }),
+  setIsListening: (value) => set({ isListening: !!value }),
+  setCurrentTranscript: (text) => set({ currentTranscript: text ?? '' }),
 
   // Conversation feedback & mic
   setCurrentFeedback: (feedback) =>
@@ -123,6 +139,7 @@ const useStore = create((set) => ({
     })),
   setHintsOn: (on) => set({ hintsOn: !!on }),
   setPlaybackSpeed: (speed) => set({ playbackSpeed: Number(speed) || 1 }),
+  setIsAISpeaking: (value) => set({ isAISpeaking: !!value }),
 
   // --- Vocabulary ---
   addVocabularyLearned: (word) =>
