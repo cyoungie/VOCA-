@@ -1,16 +1,27 @@
 /**
  * Ready Player Me avatar IDs per scenario.
- * Get your own avatar IDs at https://readyplayer.me/avatar
+ * Each character should be dressed for the location – create one avatar per scenario
+ * at https://readyplayer.me/avatar with the right outfit, then paste the avatar ID here.
+ *
+ * Suggested outfits:
+ *   cafe        – barista / casual (apron, casual)
+ *   interview   – professional (suit, business)
+ *   airport     – uniform (agent / security style)
+ *   doctor      – white coat / medical
+ *   shopping    – shop assistant (smart casual)
+ *   dating      – casual / date-appropriate
+ *   hotel       – receptionist (smart)
+ *   restaurant  – waiter (shirt, optional apron)
+ *   taxi        – driver (casual)
+ *
  * Format: https://models.readyplayer.me/{avatarId}.glb
  */
 const RPM_BASE = 'https://models.readyplayer.me';
 
-// Demo avatar IDs – replace with your own from Ready Player Me Avatar Creator
-// Using one friendly professional avatar for all; you can assign different IDs per scenario
 const AVATAR_IDS = {
-  cafe: '65a8dba831b23abb4f401bae',       // Casual / barista style
-  interview: '65a8dba831b23abb4f401bae',   // Professional
-  airport: '65a8dba831b23abb4f401bae',   // Uniformed agent
+  cafe: '65a8dba831b23abb4f401bae',
+  interview: '65a8dba831b23abb4f401bae',
+  airport: '65a8dba831b23abb4f401bae',
   doctor: '65a8dba831b23abb4f401bae',
   shopping: '65a8dba831b23abb4f401bae',
   dating: '65a8dba831b23abb4f401bae',
@@ -21,7 +32,6 @@ const AVATAR_IDS = {
 
 const DEFAULT_AVATAR_ID = '65a8dba831b23abb4f401bae';
 
-/** Query params for smaller file size and faster load */
 const GLB_PARAMS = 'quality=medium&textureAtlas=1024';
 
 export function getAvatarUrl(scenarioId) {
@@ -34,3 +44,16 @@ export function getAvatarUrls() {
     Object.keys(AVATAR_IDS).map((id) => [id, getAvatarUrl(id)])
   );
 }
+
+/** Outfit / role description per scenario (for UI or prompts). */
+export const AVATAR_OUTFITS = {
+  cafe: 'Barista / casual (apron)',
+  interview: 'Professional (suit)',
+  airport: 'Uniform (agent)',
+  doctor: 'Medical (white coat)',
+  shopping: 'Shop assistant',
+  dating: 'Casual / date',
+  hotel: 'Receptionist',
+  restaurant: 'Waiter',
+  taxi: 'Driver',
+};

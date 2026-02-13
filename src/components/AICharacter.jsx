@@ -4,6 +4,12 @@ import useStore from '../store/useStore';
 import { getScenario } from '../data/scenarios';
 import AvatarScene from './AvatarScene';
 
+/** Use uploaded character image instead of 3D model (see public/avatars/character.png) */
+const USE_IMAGE_AVATAR = true;
+
+/** Which character from the image: 'left' (male) or 'right' (female) */
+const IMAGE_AVATAR_SIDE = 'left';
+
 /** Catches GLB load / runtime errors and shows fallback */
 class AvatarErrorBoundary extends Component {
   state = { hasError: false };
@@ -45,8 +51,33 @@ const PlaceholderAvatar = ({ characterRole }) => (
 );
 
 /**
- * AI character in scenario: 3D avatar (Ready Player Me) over background.
- * Idle: breathing, slight movement. Talking: synced to isAISpeaking (TTS).
+ * Image-based avatar: one character from the uploaded photo (cropped left or right half).
+ * Subtle scale when speaking.
+ */
+function ImageAvatar({ isSpeaking }) {
+  const objectPos = IMAGE_AVATAR_SIDE === 'right' ? 'right center' : 'left center';
+
+  return (
+    <div
+      className={`absolute inset-0 flex items-center justify-center transition-transform duration-200 ${
+        isSpeaking ? 'scale-[1.02]' : 'scale-100'
+      }`}
+    >
+      <div className="h-full max-h-[420px] w-full max-w-[280px] overflow-hidden rounded-lg shadow-2xl">
+        <img
+          src="/avatars/character.png"
+          alt="AI character"
+          className="h-full w-[200%] max-w-none object-cover"
+          style={{ objectPosition: objectPos }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * AI character in scenario: image avatar (uploaded photo) or 3D (Ready Player Me).
+ * Idle: subtle presence. Talking: slight scale when isAISpeaking (TTS).
  */
 export default function AICharacter({ scenarioId }) {
   const scenario = getScenario(scenarioId);
@@ -72,25 +103,29 @@ export default function AICharacter({ scenarioId }) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
       </div>
 
-      {/* 3D character overlay – waist-up, center */}
+      {/* Character overlay – image (uploaded photo) or 3D */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <AvatarErrorBoundary fallback={fallback}>
-          <div className="w-full h-full min-h-[280px] md:min-h-[360px]">
-            <Suspense
-              fallback={
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="w-20 h-20 rounded-full bg-white/10 animate-pulse flex items-center justify-center">
-                    <span className="text-2xl">👤</span>
+        {USE_IMAGE_AVATAR ? (
+          <ImageAvatar isSpeaking={isAISpeaking} />
+        ) : (
+          <AvatarErrorBoundary fallback={fallback}>
+            <div className="w-full h-full min-h-[280px] md:min-h-[360px]">
+              <Suspense
+                fallback={
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-20 h-20 rounded-full bg-white/10 animate-pulse flex items-center justify-center">
+                      <span className="text-2xl">👤</span>
+                    </div>
                   </div>
-                </div>
-              }
-            >
-              <TransparentCanvas>
-                <AvatarScene scenarioId={scenarioId} isSpeaking={isAISpeaking} />
-              </TransparentCanvas>
-            </Suspense>
-          </div>
-        </AvatarErrorBoundary>
+                }
+              >
+                <TransparentCanvas>
+                  <AvatarScene scenarioId={scenarioId} isSpeaking={isAISpeaking} />
+                </TransparentCanvas>
+              </Suspense>
+            </div>
+          </AvatarErrorBoundary>
+        )}
       </div>
 
       {/* Role label – bottom */}

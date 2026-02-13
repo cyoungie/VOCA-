@@ -1,59 +1,106 @@
 /**
- * Text-to-speech for AI character responses.
- * Uses Web Speech Synthesis API (built-in, no key required).
+ * Text-to-speech for AI character: ElevenLabs (natural voice) with Web Speech fallback.
  * onStart / onEnd drive character mouth animation (isAISpeaking).
  */
 
 const DEFAULT_LANG = 'en-US';
+const ELEVENLABS_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 
-let synthesis = null;
+function getElevenLabsKey() {
+  return typeof import.meta !== 'undefined' && import.meta.env?.VITE_ELEVENLABS_API_KEY;
+}
+
+function getElevenLabsVoiceId() {
+  return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ELEVENLABS_VOICE_ID) || 'EXAVITQu4vr4xnSDxMaL';
+}
 
 function getSynthesis() {
   if (typeof window === 'undefined') return null;
-  if (!window.speechSynthesis) return null;
-  return window.speechSynthesis;
+  return window.speechSynthesis || null;
 }
 
-/**
- * Get a natural-sounding voice for the given language.
- * Prefer a local, non-robotic voice.
- */
 function getVoice(lang = DEFAULT_LANG) {
   const syn = getSynthesis();
   if (!syn) return null;
   const voices = syn.getVoices();
-  const match = voices.find((v) => v.lang.startsWith(lang) && v.localService) ||
-    voices.find((v) => v.lang.startsWith(lang)) ||
-    voices.find((v) => v.default);
-  return match || null;
+  return voices.find((v) => v.lang.startsWith(lang) && v.localService)
+    || voices.find((v) => v.lang.startsWith(lang))
+    || voices.find((v) => v.default)
+    || null;
 }
 
 /**
- * Speak text with Web Speech Synthesis.
- * @param {string} text - Text to speak
- * @param {Object} [options]
- * @param {string} [options.lang] - Language code (default: en-US)
- * @param {number} [options.rate] - Speed 0.1–10 (default: 1)
- * @param {number} [options.pitch] - Pitch 0–2 (default: 1)
- * @param {() => void} [options.onStart] - Called when speech starts (e.g. set isAISpeaking true)
- * @param {() => void} [options.onEnd] - Called when speech ends (e.g. set isAISpeaking false)
- * @param {(e: Error) => void} [options.onError] - Called on error
+ * Speak using ElevenLabs API: fetch audio, play via Audio element, fire onStart/onEnd.
  */
-export function speak(text, options = {}) {
+function speakElevenLabs(text, options) {
+  const apiKey = getElevenLabsKey();
+  if (!apiKey) return false;
+
+  const voiceId = getElevenLabsVoiceId();
+  const { rate = 1, onStart, onEnd, onError } = options;
+
+  const url = `${ELEVENLABS_URL}/${voiceId}`;
+  const body = JSON.stringify({
+    text: text.trim(),
+    model_id: 'eleven_multilingual_v2',
+  });
+
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'xi-api-key': apiKey,
+    },
+    body,
+  })
+    .then((res) => {
+      if (!res.ok) return res.json().then((j) => Promise.reject(new Error(j?.detail?.message || j?.message || `ElevenLabs ${res.status}`)));
+      return res.arrayBuffer();
+    })
+    .then((arrayBuffer) => {
+      const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+      const objectUrl = URL.createObjectURL(blob);
+      const audio = new window.Audio(objectUrl);
+      audio.playbackRate = Math.max(0.5, Math.min(2, rate));
+
+      audio.onplay = () => {
+        onStart?.();
+      };
+      audio.onended = () => {
+        URL.revokeObjectURL(objectUrl);
+        onEnd?.();
+      };
+      audio.onerror = (e) => {
+        URL.revokeObjectURL(objectUrl);
+        onError?.(new Error(e?.message || 'Playback error'));
+        onEnd?.();
+      };
+
+      audio.play().catch((err) => {
+        URL.revokeObjectURL(objectUrl);
+        onError?.(err);
+        onEnd?.();
+      });
+    })
+    .catch((err) => {
+      onError?.(err);
+      onEnd?.();
+    });
+
+  return true;
+}
+
+/**
+ * Speak using Web Speech Synthesis (fallback when ElevenLabs key is not set).
+ */
+function speakWebSpeech(text, options) {
   const syn = getSynthesis();
   if (!syn) {
     options.onError?.(new Error('Speech synthesis not supported'));
     return;
   }
 
-  const {
-    lang = DEFAULT_LANG,
-    rate = 1,
-    pitch = 1,
-    onStart,
-    onEnd,
-    onError,
-  } = options;
+  const { lang = DEFAULT_LANG, rate = 1, pitch = 1, onStart, onEnd, onError } = options;
 
   syn.cancel();
 
@@ -66,16 +113,10 @@ export function speak(text, options = {}) {
   const voice = getVoice(lang);
   if (voice) utterance.voice = voice;
 
-  utterance.onstart = () => {
-    onStart?.();
-  };
-
-  utterance.onend = () => {
-    onEnd?.();
-  };
-
-  utterance.onerror = (e) => {
-    onError?.(new Error(e?.error || 'Speech synthesis error'));
+  utterance.onstart = () => onStart?.();
+  utterance.onend = () => onEnd?.();
+  utterance.onerror = () => {
+    onError?.(new Error('Speech synthesis error'));
     onEnd?.();
   };
 
@@ -83,18 +124,40 @@ export function speak(text, options = {}) {
 }
 
 /**
- * Stop any current speech.
+ * Speak text: uses ElevenLabs if VITE_ELEVENLABS_API_KEY is set, otherwise Web Speech.
+ * @param {string} text - Text to speak
+ * @param {Object} [options]
+ * @param {string} [options.lang] - Language (Web fallback only)
+ * @param {number} [options.rate] - Speed (default 1)
+ * @param {number} [options.pitch] - Pitch (Web fallback only)
+ * @param {() => void} [options.onStart] - When speech starts → set isAISpeaking true
+ * @param {() => void} [options.onEnd] - When speech ends → set isAISpeaking false
+ * @param {(e: Error) => void} [options.onError] - On error
+ */
+export function speak(text, options = {}) {
+  if (!text?.trim()) {
+    options.onEnd?.();
+    return;
+  }
+  const used = speakElevenLabs(text, options);
+  if (!used) speakWebSpeech(text, options);
+}
+
+/**
+ * Stop any current speech (Web Speech only; ElevenLabs playback would need ref to Audio).
  */
 export function stopSpeaking() {
   const syn = getSynthesis();
   if (syn) syn.cancel();
 }
 
-/**
- * Check if speech synthesis is available.
- */
 export function isSpeechSupported() {
-  return !!getSynthesis();
+  return !!getSynthesis() || !!getElevenLabsKey();
+}
+
+/** Whether ElevenLabs is configured (avatar will use natural voice). */
+export function isElevenLabsEnabled() {
+  return !!getElevenLabsKey();
 }
 
 export default speak;
