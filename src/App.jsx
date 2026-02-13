@@ -1,6 +1,6 @@
 import useStore from './store/useStore';
 import HomePage from './components/HomePage';
-import SceneRouter from './components/SceneRouter';
+import ConversationView from './components/ConversationView';
 import ResultsScreen from './components/ResultsScreen';
 
 export default function App() {
@@ -8,5 +8,5 @@ export default function App() {
 
   if (screen === 'home') return <HomePage />;
   if (screen === 'results') return <ResultsScreen />;
-  return <SceneRouter />;
+  return <ConversationView />;
 }
