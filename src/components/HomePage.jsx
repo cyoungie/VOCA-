@@ -36,6 +36,7 @@ export default function HomePage() {
             </svg>
           </button>
         </div>
+      </header>
 
       <section className="home__scenarios">
         <h2 className="home__scenarios-title">Browse Scenarios</h2>
