@@ -1,58 +1,202 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import useStore from '../store/useStore';
-import { getScenario } from '../data/scenarios';
+import { getScenario, getGoals } from '../data/scenarios';
 import AICharacter from './AICharacter';
 import FeedbackPanel from './FeedbackPanel';
 import ProgressBar from './ProgressBar';
+import VoiceInput from './VoiceInput';
+import { getAIResponse } from '../services/aiService';
+import { speak as speakTTS } from '../services/speechService';
 
 /**
- * Main 2D conversation interface: character + background, feedback panel, progress, controls.
- * Duolingo-meets-Zoom style; placeholder behavior until real AI integration.
+ * Main 2D conversation interface: voice → OpenAI → TTS → character animation + feedback.
  */
 export default function ConversationView() {
   const currentScene = useStore((s) => s.currentScene);
-  const exitToResults = useStore((s) => s.exitToResults);
-  const goHome = useStore((s) => s.goHome);
-  const setMicStatus = useStore((s) => s.setMicStatus);
-  const setLiveTranscript = useStore((s) => s.setLiveTranscript);
-  const addFeedback = useStore((s) => s.addFeedback);
-  const advanceGoal = useStore((s) => s.advanceGoal);
+  const conversationHistory = useStore((s) => s.conversationHistory);
   const currentGoalIndex = useStore((s) => s.currentGoalIndex);
+  const playbackSpeed = useStore((s) => s.playbackSpeed);
+  const exitToResults = useStore((s) => s.exitToResults);
+  const goHomeStore = useStore((s) => s.goHome);
+  const handleGoHome = () => {
+    // Track practice time before leaving
+    if (sessionStartRef.current) {
+      const durationMinutes = Math.round((Date.now() - sessionStartRef.current) / 60000);
+      if (durationMinutes > 0) {
+        addPracticeTime(durationMinutes);
+      }
+      sessionStartRef.current = null;
+    }
+    goHomeStore();
+  };
+  const addFeedback = useStore((s) => s.addFeedback);
+  const addAssistantMessage = useStore((s) => s.addAssistantMessage);
+  const setMicStatus = useStore((s) => s.setMicStatus);
+  const setIsAISpeaking = useStore((s) => s.setIsAISpeaking);
   const hintsOn = useStore((s) => s.hintsOn);
   const setHintsOn = useStore((s) => s.setHintsOn);
-  const playbackSpeed = useStore((s) => s.playbackSpeed);
   const setPlaybackSpeed = useStore((s) => s.setPlaybackSpeed);
 
-  const [muted, setMuted] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const lastProcessedRef = useRef(0);
+  const isProcessingRef = useRef(false);
+  const sessionStartRef = useRef(null);
+  const addPracticeTime = useStore((s) => s.addPracticeTime);
+  const addCompletedScenario = useStore((s) => s.addCompletedScenario);
 
   const scenario = getScenario(currentScene);
-  const goals = scenario?.goals ?? [];
-  const totalGoals = goals.length;
-  const allGoalsDone = totalGoals > 0 && currentGoalIndex >= totalGoals;
+  const goals = getGoals(currentScene);
+  const currentGoal = goals[currentGoalIndex] ?? null;
+  const hasGreetedRef = useRef(false);
+  const lastSceneRef = useRef(currentScene);
+
+  // Track session start time
+  useEffect(() => {
+    if (!sessionStartRef.current) {
+      sessionStartRef.current = Date.now();
+    }
+    return () => {
+      if (sessionStartRef.current) {
+        const durationMinutes = Math.round((Date.now() - sessionStartRef.current) / 60000);
+        if (durationMinutes > 0) {
+          addPracticeTime(durationMinutes);
+        }
+        sessionStartRef.current = null;
+      }
+    };
+  }, [addPracticeTime]);
+
+  // Reset greeting flag when scene changes
+  useEffect(() => {
+    if (lastSceneRef.current !== currentScene) {
+      hasGreetedRef.current = false;
+      lastSceneRef.current = currentScene;
+    }
+  }, [currentScene]);
+
+  // AI greets user first when entering scenario (conversation is empty)
+  useEffect(() => {
+    if (conversationHistory.length > 0 || isProcessingRef.current || hasGreetedRef.current) return;
+    hasGreetedRef.current = true;
+    isProcessingRef.current = true;
+    setAiError(null);
+    setMicStatus('processing');
+
+    getAIResponse({
+      userMessage: 'Start the conversation.',
+      conversationHistory: [],
+      scenarioTitle: scenario?.title ?? currentScene,
+      characterRole: scenario?.characterRole ?? 'Assistant',
+      currentGoal,
+      goals,
+      goalIndex: currentGoalIndex,
+      isGreeting: true,
+    })
+      .then(({ reply, feedback }) => {
+        addAssistantMessage(reply);
+        feedback.forEach((item) => addFeedback(item));
+        if (reply?.trim()) {
+          speakTTS(reply.trim(), {
+            rate: playbackSpeed,
+            onStart: () => setIsAISpeaking(true),
+            onEnd: () => {
+              setIsAISpeaking(false);
+              setMicStatus('listening');
+              isProcessingRef.current = false;
+            },
+            onError: () => {
+              setIsAISpeaking(false);
+              setMicStatus('listening');
+              isProcessingRef.current = false;
+            },
+          });
+        } else {
+          setMicStatus('listening');
+          isProcessingRef.current = false;
+        }
+      })
+      .catch((err) => {
+        setAiError(err?.message ?? 'AI error');
+        addFeedback({ type: 'tip', text: 'Could not get a response. Try again.' });
+        setMicStatus('listening');
+        setIsAISpeaking(false);
+        isProcessingRef.current = false;
+      });
+  }, [currentScene, scenario, currentGoal, goals, currentGoalIndex, playbackSpeed, addAssistantMessage, addFeedback, setMicStatus, setIsAISpeaking, conversationHistory.length]);
+
+  // When user sends a message → call OpenAI → add reply + feedback → TTS (character animates)
+  useEffect(() => {
+    const history = conversationHistory;
+    if (!history.length || isProcessingRef.current) return;
+    const last = history[history.length - 1];
+    if (last?.role !== 'user' || history.length <= lastProcessedRef.current) return;
+
+    const userText = last.text?.trim();
+    if (!userText) return;
+
+    lastProcessedRef.current = history.length;
+    isProcessingRef.current = true;
+    setAiError(null);
+    setMicStatus('processing');
+
+    getAIResponse({
+      userMessage: userText,
+      conversationHistory: history.slice(0, -1),
+      scenarioTitle: scenario?.title ?? currentScene,
+      characterRole: scenario?.characterRole ?? 'Assistant',
+      currentGoal,
+      goals,
+      goalIndex: currentGoalIndex,
+    })
+      .then(({ reply, feedback }) => {
+        addAssistantMessage(reply);
+        feedback.forEach((item) => addFeedback(item));
+        if (reply?.trim()) {
+          speakTTS(reply.trim(), {
+            rate: playbackSpeed,
+            onStart: () => setIsAISpeaking(true),
+            onEnd: () => {
+              setIsAISpeaking(false);
+              setMicStatus('listening');
+              isProcessingRef.current = false;
+            },
+            onError: () => {
+              setIsAISpeaking(false);
+              setMicStatus('listening');
+              isProcessingRef.current = false;
+            },
+          });
+        } else {
+          setMicStatus('listening');
+          isProcessingRef.current = false;
+        }
+      })
+      .catch((err) => {
+        setAiError(err?.message ?? 'AI error');
+        addFeedback({ type: 'tip', text: 'Could not get a response. Try again.' });
+        setMicStatus('listening');
+        setIsAISpeaking(false);
+        isProcessingRef.current = false;
+      });
+  }, [conversationHistory, currentScene, scenario, currentGoal, goals, currentGoalIndex, playbackSpeed, addAssistantMessage, addFeedback, setMicStatus, setIsAISpeaking]);
 
   const handleEndConversation = () => {
+    // Track practice time and completed scenario
+    if (sessionStartRef.current) {
+      const durationMinutes = Math.round((Date.now() - sessionStartRef.current) / 60000);
+      if (durationMinutes > 0) {
+        addPracticeTime(durationMinutes);
+        addCompletedScenario(currentScene, durationMinutes);
+      }
+      sessionStartRef.current = null;
+    }
     exitToResults({
       score: 85,
       newWordsCount: 5,
       pronunciationGrade: 'B+',
       fluencyFeedback: 'Great job!',
     });
-  };
-
-  /* Placeholder: simulate listening → transcript → feedback (for demo) */
-  const handleDemoSpeak = () => {
-    setMicStatus('listening');
-    setLiveTranscript('');
-    setTimeout(() => {
-      setLiveTranscript("I'd like a coffee, please.");
-      setMicStatus('processing');
-    }, 800);
-    setTimeout(() => {
-      setMicStatus('idle');
-      addFeedback({ type: 'success', text: 'Great pronunciation!' });
-      if (currentGoalIndex < totalGoals) advanceGoal();
-    }, 1600);
   };
 
   const handleDemoHint = () => {
@@ -76,7 +220,7 @@ export default function ConversationView() {
         <div className="flex items-center justify-between gap-2 mb-2">
           <button
             type="button"
-            onClick={goHome}
+            onClick={handleGoHome}
             className="text-slate-400 hover:text-white text-sm font-medium"
           >
             ← Exit
@@ -93,6 +237,20 @@ export default function ConversationView() {
         <AICharacter scenarioId={currentScene} />
       </section>
 
+      {/* AI error banner */}
+      {aiError && (
+        <div className="shrink-0 px-3 md:px-4 py-2 bg-red-900/50 border-b border-red-700/50 flex items-center justify-between gap-2">
+          <span className="text-red-200 text-sm">{aiError}</span>
+          <button
+            type="button"
+            onClick={() => setAiError(null)}
+            className="text-red-300 hover:text-white text-sm font-medium"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Bottom third: feedback panel */}
       <section className="shrink-0 px-3 md:px-4 pb-3 md:pb-4">
         <div className="max-w-2xl mx-auto">
@@ -100,17 +258,11 @@ export default function ConversationView() {
         </div>
       </section>
 
-      {/* Controls: mute, end, settings */}
-      <div className="shrink-0 flex items-center justify-end gap-2 px-3 md:px-4 pb-4">
-        {/* Placeholder demo buttons – remove when real mic/AI is wired */}
-        <div className="flex gap-2 mr-auto">
-          <button
-            type="button"
-            onClick={handleDemoSpeak}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white"
-          >
-            Demo: Speak
-          </button>
+      {/* Controls: voice input, demo hints, settings, end */}
+      <div className="shrink-0 flex items-center justify-end gap-3 px-3 md:px-4 pb-4 flex-wrap">
+        <VoiceInput />
+
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={handleDemoHint}
@@ -126,34 +278,6 @@ export default function ConversationView() {
             Demo: Goal
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setMuted((m) => !m)}
-          className={`p-2.5 rounded-full transition-colors ${
-            muted ? 'bg-red-600/80 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'
-          }`}
-          title={muted ? 'Unmute' : 'Mute'}
-          aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}
-        >
-          {muted ? (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.776L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.797-3.797a1 1 0 011.414 0zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.113-.878-4.027-2.293-5.414a1 1 0 010-1.414z"
-                clipRule="evenodd"
-              />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17h6a1 1 0 110 2h-6a1 1 0 01-1-1v-2.07z"
-                clipRule="evenodd"
-              />
-            </svg>
-          )}
-        </button>
 
         <div className="relative">
           <button

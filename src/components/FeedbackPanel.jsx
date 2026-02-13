@@ -18,7 +18,7 @@ export default function FeedbackPanel() {
 
   const statusColor =
     micStatus === 'listening'
-      ? 'bg-green-500'
+      ? 'bg-red-500'
       : micStatus === 'processing'
         ? 'bg-amber-500'
         : 'bg-slate-500';
