@@ -1,17 +1,21 @@
 /**
- * OpenAI GPT-4 integration for VOCA conversation.
+ * Google Gemini integration for VOCA conversation.
  * System prompt: scenario context, current goal, conversation history.
  * Returns: { reply, feedback[] } for spoken response + on-screen tips.
  */
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 function getApiKey() {
-  const key = import.meta.env.VITE_OPENAI_API_KEY;
+  const key = import.meta.env.VITE_GEMINI_API_KEY;
   if (!key) {
-    throw new Error('VITE_OPENAI_API_KEY is not set. Add it to your .env file.');
+    throw new Error('VITE_GEMINI_API_KEY is not set. Add it to your .env file.');
   }
   return key;
+}
+
+function getModel() {
+  return import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.0-flash';
 }
 
 function buildSystemPrompt({ scenarioTitle, characterRole, currentGoal, goals, goalIndex }) {
@@ -37,15 +41,23 @@ You may include 1 or 2 feedback items. "type" must be one of: success, tip, goal
 }
 
 /**
- * Send user message to GPT-4 and get reply + feedback.
- * @param {Object} options
- * @param {string} options.userMessage - Latest user utterance
- * @param {Array<{role:string,text:string}>} options.conversationHistory - Full history (user + assistant)
- * @param {string} options.scenarioTitle - e.g. "Café"
- * @param {string} options.characterRole - e.g. "Barista"
- * @param {string} [options.currentGoal] - Current goal text
- * @param {string[]} [options.goals] - All goals for scenario
- * @param {number} [options.goalIndex] - 0-based current goal index
+ * Build Gemini contents array from conversation history + latest user message.
+ * Gemini uses role "user" and "model" (not "assistant").
+ */
+function buildContents(conversationHistory, userMessage) {
+  const contents = [];
+  for (const m of conversationHistory || []) {
+    if (!m?.text) continue;
+    const role = m.role === 'user' ? 'user' : 'model';
+    contents.push({ role, parts: [{ text: m.text }] });
+  }
+  contents.push({ role: 'user', parts: [{ text: userMessage }] });
+  return contents;
+}
+
+/**
+ * Send user message to Gemini and get reply + feedback.
+ * @param {Object} options - Same as before (userMessage, conversationHistory, scenario, etc.)
  * @returns {Promise<{ reply: string, feedback: Array<{ type: string, text: string }> }>}
  */
 export async function getAIResponse({
@@ -58,8 +70,9 @@ export async function getAIResponse({
   goalIndex = 0,
 }) {
   const apiKey = getApiKey();
+  const model = getModel();
 
-  const systemPrompt = buildSystemPrompt({
+  const systemInstruction = buildSystemPrompt({
     scenarioTitle,
     characterRole,
     currentGoal,
@@ -67,39 +80,36 @@ export async function getAIResponse({
     goalIndex,
   });
 
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...(conversationHistory || [])
-      .filter((m) => m?.text)
-      .map((m) => ({
-        role: m.role === 'user' ? 'user' : 'assistant',
-        content: m.text,
-      })),
-    { role: 'user', content: userMessage },
-  ];
+  const contents = buildContents(
+    (conversationHistory || []).filter((m) => m?.text),
+    userMessage
+  );
 
-  const res = await fetch(OPENAI_API_URL, {
+  const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
+
+  const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini',
-      messages,
-      max_tokens: 400,
-      temperature: 0.7,
+      system_instruction: { parts: [{ text: systemInstruction }] },
+      contents,
+      generationConfig: {
+        maxOutputTokens: 400,
+        temperature: 0.7,
+      },
     }),
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `OpenAI API error: ${res.status}`);
+    const msg = err?.error?.message || err?.message || `Gemini API error: ${res.status}`;
+    throw new Error(msg);
   }
 
   const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error('Empty response from OpenAI');
+  const part = data?.candidates?.[0]?.content?.parts?.[0];
+  const content = part?.text?.trim();
+  if (!content) throw new Error('Empty response from Gemini');
 
   try {
     const parsed = JSON.parse(content);
