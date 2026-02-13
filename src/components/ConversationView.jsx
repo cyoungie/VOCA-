@@ -17,7 +17,18 @@ export default function ConversationView() {
   const currentGoalIndex = useStore((s) => s.currentGoalIndex);
   const playbackSpeed = useStore((s) => s.playbackSpeed);
   const exitToResults = useStore((s) => s.exitToResults);
-  const goHome = useStore((s) => s.goHome);
+  const goHomeStore = useStore((s) => s.goHome);
+  const handleGoHome = () => {
+    // Track practice time before leaving
+    if (sessionStartRef.current) {
+      const durationMinutes = Math.round((Date.now() - sessionStartRef.current) / 60000);
+      if (durationMinutes > 0) {
+        addPracticeTime(durationMinutes);
+      }
+      sessionStartRef.current = null;
+    }
+    goHomeStore();
+  };
   const addFeedback = useStore((s) => s.addFeedback);
   const addAssistantMessage = useStore((s) => s.addAssistantMessage);
   const setMicStatus = useStore((s) => s.setMicStatus);
@@ -30,10 +41,89 @@ export default function ConversationView() {
   const [aiError, setAiError] = useState(null);
   const lastProcessedRef = useRef(0);
   const isProcessingRef = useRef(false);
+  const sessionStartRef = useRef(null);
+  const addPracticeTime = useStore((s) => s.addPracticeTime);
+  const addCompletedScenario = useStore((s) => s.addCompletedScenario);
 
   const scenario = getScenario(currentScene);
   const goals = getGoals(currentScene);
   const currentGoal = goals[currentGoalIndex] ?? null;
+  const hasGreetedRef = useRef(false);
+  const lastSceneRef = useRef(currentScene);
+
+  // Track session start time
+  useEffect(() => {
+    if (!sessionStartRef.current) {
+      sessionStartRef.current = Date.now();
+    }
+    return () => {
+      if (sessionStartRef.current) {
+        const durationMinutes = Math.round((Date.now() - sessionStartRef.current) / 60000);
+        if (durationMinutes > 0) {
+          addPracticeTime(durationMinutes);
+        }
+        sessionStartRef.current = null;
+      }
+    };
+  }, [addPracticeTime]);
+
+  // Reset greeting flag when scene changes
+  useEffect(() => {
+    if (lastSceneRef.current !== currentScene) {
+      hasGreetedRef.current = false;
+      lastSceneRef.current = currentScene;
+    }
+  }, [currentScene]);
+
+  // AI greets user first when entering scenario (conversation is empty)
+  useEffect(() => {
+    if (conversationHistory.length > 0 || isProcessingRef.current || hasGreetedRef.current) return;
+    hasGreetedRef.current = true;
+    isProcessingRef.current = true;
+    setAiError(null);
+    setMicStatus('processing');
+
+    getAIResponse({
+      userMessage: 'Start the conversation.',
+      conversationHistory: [],
+      scenarioTitle: scenario?.title ?? currentScene,
+      characterRole: scenario?.characterRole ?? 'Assistant',
+      currentGoal,
+      goals,
+      goalIndex: currentGoalIndex,
+      isGreeting: true,
+    })
+      .then(({ reply, feedback }) => {
+        addAssistantMessage(reply);
+        feedback.forEach((item) => addFeedback(item));
+        if (reply?.trim()) {
+          speakTTS(reply.trim(), {
+            rate: playbackSpeed,
+            onStart: () => setIsAISpeaking(true),
+            onEnd: () => {
+              setIsAISpeaking(false);
+              setMicStatus('listening');
+              isProcessingRef.current = false;
+            },
+            onError: () => {
+              setIsAISpeaking(false);
+              setMicStatus('listening');
+              isProcessingRef.current = false;
+            },
+          });
+        } else {
+          setMicStatus('listening');
+          isProcessingRef.current = false;
+        }
+      })
+      .catch((err) => {
+        setAiError(err?.message ?? 'AI error');
+        addFeedback({ type: 'tip', text: 'Could not get a response. Try again.' });
+        setMicStatus('listening');
+        setIsAISpeaking(false);
+        isProcessingRef.current = false;
+      });
+  }, [currentScene, scenario, currentGoal, goals, currentGoalIndex, playbackSpeed, addAssistantMessage, addFeedback, setMicStatus, setIsAISpeaking, conversationHistory.length]);
 
   // When user sends a message → call OpenAI → add reply + feedback → TTS (character animates)
   useEffect(() => {
@@ -92,6 +182,15 @@ export default function ConversationView() {
   }, [conversationHistory, currentScene, scenario, currentGoal, goals, currentGoalIndex, playbackSpeed, addAssistantMessage, addFeedback, setMicStatus, setIsAISpeaking]);
 
   const handleEndConversation = () => {
+    // Track practice time and completed scenario
+    if (sessionStartRef.current) {
+      const durationMinutes = Math.round((Date.now() - sessionStartRef.current) / 60000);
+      if (durationMinutes > 0) {
+        addPracticeTime(durationMinutes);
+        addCompletedScenario(currentScene, durationMinutes);
+      }
+      sessionStartRef.current = null;
+    }
     exitToResults({
       score: 85,
       newWordsCount: 5,
@@ -121,7 +220,7 @@ export default function ConversationView() {
         <div className="flex items-center justify-between gap-2 mb-2">
           <button
             type="button"
-            onClick={goHome}
+            onClick={handleGoHome}
             className="text-slate-400 hover:text-white text-sm font-medium"
           >
             ← Exit

@@ -8,19 +8,25 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 function getApiKey() {
   const key = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!key) {
-    throw new Error('VITE_GEMINI_API_KEY is not set. Add it to your .env file.');
+  if (!key || typeof key !== 'string' || !key.trim()) {
+    throw new Error(
+      'Gemini API key not found. Use a .env file (not .env.example) in the project root with: VITE_GEMINI_API_KEY=your_key (the VITE_ prefix is required). Then restart the dev server (npm run dev). Key: aistudio.google.com/apikey'
+    );
   }
-  return key;
+  return key.trim();
 }
 
 function getModel() {
   return import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.0-flash';
 }
 
-function buildSystemPrompt({ scenarioTitle, characterRole, currentGoal, goals, goalIndex }) {
+function buildSystemPrompt({ scenarioTitle, characterRole, currentGoal, goals, goalIndex, isGreeting = false }) {
   const goalList = goals?.length ? goals.map((g, i) => `${i + 1}. ${g}`).join('\n') : 'N/A';
   const current = currentGoal ? `Current goal: ${currentGoal}` : 'No specific goal.';
+
+  const greetingInstruction = isGreeting
+    ? '\nIMPORTANT: This is the start of the conversation. Greet the user warmly as your character would, introduce yourself briefly, and invite them to start practicing. Keep it friendly and encouraging (1–2 sentences).'
+    : '';
 
   return `You are the AI character in a language learning conversation. You play the role of: ${characterRole} in a ${scenarioTitle} scenario.
 
@@ -28,6 +34,7 @@ Your goals for this scenario (help the user practice these):
 ${goalList}
 
 ${current} (Goal ${(goalIndex ?? 0) + 1} of ${goals?.length ?? 0})
+${greetingInstruction}
 
 Rules:
 - Respond naturally and briefly as ${characterRole} would (1–3 sentences).
@@ -68,6 +75,7 @@ export async function getAIResponse({
   currentGoal,
   goals,
   goalIndex = 0,
+  isGreeting = false,
 }) {
   const apiKey = getApiKey();
   const model = getModel();
@@ -78,12 +86,16 @@ export async function getAIResponse({
     currentGoal,
     goals,
     goalIndex,
+    isGreeting,
   });
 
-  const contents = buildContents(
-    (conversationHistory || []).filter((m) => m?.text),
-    userMessage
-  );
+  // For greeting, send empty conversation with a prompt to greet
+  const contents = isGreeting
+    ? [{ role: 'user', parts: [{ text: 'Start the conversation by greeting the user warmly.' }] }]
+    : buildContents(
+        (conversationHistory || []).filter((m) => m?.text),
+        userMessage
+      );
 
   const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
 
