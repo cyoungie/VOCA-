@@ -1,0 +1,346 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f0f1a;
+  color: #eee;
+}
+
+/* ----- Home (2D) ----- */
+.home {
+  min-height: 100vh;
+  padding: 2rem;
+  background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+}
+
+.home__header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.home__title {
+  margin: 0 0 0.25rem;
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.home__subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  opacity: 0.85;
+}
+
+.home__scenarios-title {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.home__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.home__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 1.25rem 1rem;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 12px;
+  color: #eee;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.home__card:hover {
+  background: rgba(99, 102, 241, 0.25);
+  transform: translateY(-2px);
+}
+
+.home__card-label {
+  display: block;
+}
+
+.home__card-hint {
+  font-size: 0.7rem;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* ----- VR scenario frame ----- */
+.scene-router {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.scene-router__back {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #eee;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.scene-router__back:hover {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.scene-router--loading {
+  background: #1a1a2e;
+}
+
+.scene-loading {
+  text-align: center;
+  color: #eee;
+}
+
+.scene-loading__spinner {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 1rem;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: scene-spin 0.8s linear infinite;
+}
+
+.scene-loading__text {
+  margin: 0;
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+@keyframes scene-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.scene {
+  width: 100%;
+  min-height: 100vh;
+  padding: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #eee;
+}
+
+.vr-frame {
+  max-width: 420px;
+  padding: 2rem;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.vr-frame__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+}
+
+.vr-frame__desc,
+.vr-frame__prompt,
+.vr-frame__continue {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+.vr-frame__prompt {
+  font-style: italic;
+  color: #a5b4fc;
+}
+
+.vr-frame__feedback {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  text-align: left;
+}
+
+.vr-frame__feedback-item {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.vr-frame__feedback-item:last-child {
+  margin-bottom: 0;
+}
+
+.vr-frame__feedback--success {
+  color: #86efac;
+}
+
+.vr-frame__feedback--tip {
+  color: #fcd34d;
+}
+
+.vr-frame__finish {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background: #6366f1;
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vr-frame__finish:hover {
+  background: #4f46e5;
+}
+
+.scene-cafe {
+  background: linear-gradient(135deg, #2d1f0f 0%, #1a1510 100%);
+}
+
+.scene-airport {
+  background: linear-gradient(135deg, #0f1a2d 0%, #0d1520 100%);
+}
+
+.scene-shopping {
+  background: linear-gradient(135deg, #1f2d0f 0%, #151a10 100%);
+}
+
+.scene-interview {
+  background: linear-gradient(135deg, #1f1a2d 0%, #15101a 100%);
+}
+
+.scene-doctor {
+  background: linear-gradient(135deg, #1a2d2d 0%, #101a1a 100%);
+}
+
+.scene-dating {
+  background: linear-gradient(135deg, #2d1a2d 0%, #1a101a 100%);
+}
+
+.scene-hotel {
+  background: linear-gradient(135deg, #2d2a1f 0%, #1a1810 100%);
+}
+
+.scene-restaurant {
+  background: linear-gradient(135deg, #2d1f0f 0%, #1a1510 100%);
+}
+
+.scene-taxi {
+  background: linear-gradient(135deg, #1f2d2a 0%, #101a18 100%);
+}
+
+/* ----- Results (2D/3D) ----- */
+.results {
+  min-height: 100vh;
+  padding: 2rem;
+  background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.results__header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.results__title {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.results__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  max-width: 360px;
+  margin-bottom: 2rem;
+}
+
+.results__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.25rem;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 12px;
+}
+
+.results__stat-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.results__stat-label {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.results__stat-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.results__actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.results__btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.results__btn--secondary {
+  background: rgba(255, 255, 255, 0.15);
+  color: #eee;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.results__btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.results__btn--primary {
+  background: #6366f1;
+  color: #fff;
+}
+
+.results__btn--primary:hover {
+  background: #4f46e5;
+}
