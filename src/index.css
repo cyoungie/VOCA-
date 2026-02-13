@@ -1,6 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-voca-primary: #6366f1;
+  --color-voca-dark: #0f0f1a;
+  --color-voca-surface: #1a1a2e;
+}
 
 * {
   box-sizing: border-box;
